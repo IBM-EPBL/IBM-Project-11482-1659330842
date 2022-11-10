@@ -1,116 +1,115 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
-#include <ArduinoJson.h>
-
-WiFiClient wifiClient;
-
-#define ORG "kr9fjo"
-#define DEVICE_TYPE "TestDeviceType"
-#define DEVICE_ID "12345"
-#define TOKEN "VJsSC148dk1dCN3UqS"
-#define speed 0.034 
-
+void callback(char* subscribetopic, byte* payload, unsigned int
+payloadLength);
+//-------credentials of IBM Accounts------
+#define ORG "ytluse"//IBM ORGANITION ID
+#define DEVICE_TYPE "2702"//Device type mentioned in ibm watson IOT Platform
+#define DEVICE_ID "12345"//Device ID mentioned in ibm watson IOT Platform
+#define TOKEN "O+n)Eh+lNX0y3?rG!8" //Token
+String data3;
 char server[] = ORG ".messaging.internetofthings.ibmcloud.com";
-char publishTopic[] = "iot-2/evt/abcd_1/fmt/json";
-char topic[] = "iot-2/cmd/home/fmt/String";  
+char publishTopic[] = "iot-2/evt/Data/fmt/json";
+char subscribetopic[] = "iot-2/cmd/test/fmt/String";
 char authMethod[] = "use-token-auth";
 char token[] = TOKEN;
 char clientId[] = "d:" ORG ":" DEVICE_TYPE ":" DEVICE_ID;
-PubSubClient client(server, 1883, wifiClient);
-void publishData();
-
-const int trigpin=5;
-const int echopin=18;
-String command;
-String data="";
-String lat="14.167589";
-String lon="80.248510";
-String name="point2";
-String icon="";
-
+WiFiClient wifiClient;
+PubSubClient client(server, 1883, callback ,wifiClient);
+const int trigPin = 5;
+const int echoPin = 18;
+#define SOUND_SPEED 0.034
 long duration;
-int dist;
+float distance;
+void setup() {
+Serial.begin(115200);
+pinMode(trigPin, OUTPUT);
+pinMode(echoPin, INPUT);
 
-void setup()
+wificonnect();
+mqttconnect();
+}
+void loop()
 {
-  Serial.begin(115200);
-  pinMode(trigpin, OUTPUT);
-  pinMode(echopin, INPUT);
-  wifiConnect();
-  mqttConnect();
+digitalWrite(trigPin, LOW);
+delayMicroseconds(2);
+digitalWrite(trigPin, HIGH);
+delayMicroseconds(10);
+digitalWrite(trigPin, LOW);
+duration = pulseIn(echoPin, HIGH);
+distance = duration * SOUND_SPEED/2;
+Serial.print("Distance (cm): ");
+Serial.println(distance);
+if(distance<100)
+{
+Serial.println("ALERT!!");
+delay(1000);
+PublishData(distance);
+delay(1000);
+if (!client.loop()) {
+mqttconnect();
+}
+}
+delay(1000);
+}
+void PublishData(float dist) {
+mqttconnect();
+String payload = "{\"Distance\":";
+payload += dist;
+payload += ",\"ALERT!!\":""\"Distance less than 100cms\"";
+payload += "}";
+Serial.print("Sending payload: ");
+Serial.println(payload);
+
+if (client.publish(publishTopic, (char*) payload.c_str())) {
+Serial.println("Publish ok");
+} else {
+Serial.println("Publish failed");
+}
 }
 
-void loop() {
-
-  publishData();
-  delay(500);
-
-  if (!client.loop()) {
-    mqttConnect();
-  }
+void mqttconnect() {
+if (!client.connected()) {
+Serial.print("Reconnecting client to ");
+Serial.println(server);
+while (!!!client.connect(clientId, authMethod, token)) {
+Serial.print(".");
+delay(500);
 }
-
-void wifiConnect() {
-  Serial.print("Connecting to "); Serial.print("Wifi");
-  WiFi.begin("Wokwi-GUEST", "", 6);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.print("WiFi connected, IP address: "); Serial.println(WiFi.localIP());
+initManagedDevice();
+Serial.println();
 }
-
-void mqttConnect() {
-  if (!client.connected()) {
-    Serial.print("Reconnecting MQTT client to "); Serial.println(server);
-    while (!client.connect(clientId, authMethod, token)) {
-      Serial.print(".");
-      delay(1000);
-    }
-    initManagedDevice();
-    Serial.println();
-  }
 }
-
+void wificonnect()
+{
+Serial.println();
+Serial.print("Connecting to ");
+WiFi.begin("Wokwi-GUEST", "", 6);
+while (WiFi.status() != WL_CONNECTED) {
+delay(500);
+Serial.print(".");
+}
+Serial.println("");
+Serial.println("WiFi connected");
+Serial.println("IP address: ");
+Serial.println(WiFi.localIP());
+}
 void initManagedDevice() {
-  if (client.subscribe(topic)) {
-     Serial.println(client.subscribe(topic));
-    Serial.println("subscribe to cmd OK");
-  } else {
-    Serial.println("subscribe to cmd FAILED");
-  }
+if (client.subscribe(subscribetopic)) {
+Serial.println((subscribetopic));
+Serial.println("subscribe to cmd OK");
+} else {
+Serial.println("subscribe to cmd FAILED");
 }
-void publishData()
+}
+void callback(char* subscribetopic, byte* payload, unsigned int payloadLength)
 {
-  digitalWrite(trigpin,LOW);
-  digitalWrite(trigpin,HIGH);
-  delayMicroseconds(10);
-  digitalWrite(trigpin,LOW);
-  duration=pulseIn(echopin,HIGH);
-  dist=duration*speed/2;
-  
-  if(dist<100){
-    dist=100-dist;
-    icon="fa-trash";
-  }else{
-    dist=0;
-    icon="fa-trash-o";
-  }
-  DynamicJsonDocument doc(1024);
-  String payload;
-  doc["Name"]=name;
-  doc["Latitude"]=lat;
-  doc["Longitude"]=lon;
-  doc["Icon"]=icon;
-  doc["FillPercent"]=dist;
-  serializeJson(doc, payload);
-  delay(3000);
-  Serial.print("\n");
-  Serial.print("Sending payload: ");
-  Serial.println(payload);
-  if (client.publish(publishTopic, (char*) payload.c_str())) {
-    Serial.println("Publish OK");
-  } else {
-    Serial.println("Publish FAILED");
-  }
+Serial.print("callback invoked for topic: ");
+Serial.println(subscribetopic);
+for (int i = 0; i < payloadLength; i++) {
+//Serial.print((char)payload[i]);
+data3 += (char)payload[i];
+}
+Serial.println("data: "+ data3);
+data3="";
 }
